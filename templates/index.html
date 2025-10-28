@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Job Finder API</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f7fa; margin: 0; padding: 20px; }
+    .container { max-width: 700px; margin: auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    input, button { padding: 10px; font-size: 14px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 10px; width: 100%; }
+    button { background: #2563eb; color: #fff; border: none; cursor: pointer; }
+    .result { margin-top: 20px; }
+    .job { padding: 10px; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Job Finder — API Demo</h2>
+    <input id="skill" placeholder="Skill(s) e.g. Python, Flask" />
+    <input id="location" placeholder="Location (optional)" />
+    <input id="min_salary" placeholder="Min Salary (optional)" />
+    <input id="max_count" placeholder="Max Results (e.g. 10)" />
+    <button onclick="searchJobs()">Search</button>
+
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    async function searchJobs() {
+      const skill = document.getElementById('skill').value;
+      const location = document.getElementById('location').value;
+      const min_salary = parseInt(document.getElementById('min_salary').value || 0);
+      const max_count = parseInt(document.getElementById('max_count').value || 15);
+
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill, location, min_salary, max_count })
+      });
+
+      const data = await res.json();
+      const div = document.getElementById('result');
+      div.innerHTML = "";
+
+      if (data.error) {
+        div.innerHTML = `<p style="color:red">${data.error}</p>`;
+        return;
+      }
+
+      div.innerHTML = `<h3>Found ${data.count} jobs</h3>`;
+      data.jobs.forEach(job => {
+        div.innerHTML += `<div class='job'>
+          <strong>${job.title}</strong><br>
+          ${job.company} — ${job.location} (${job.source})<br>
+          <a href='${job.link}' target='_blank'>View</a>
+        </div>`;
+      });
+    }
+  </script>
+</body>
+</html>
