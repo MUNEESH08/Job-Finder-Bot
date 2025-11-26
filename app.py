@@ -6,22 +6,11 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    """Render the main frontend page"""
     return render_template('index.html')
 
 
 @app.route('/api/search', methods=['POST'])
 def api_search():
-    """
-    POST JSON body example:
-    {
-      "skill": "Python, Flask, SQL",
-      "location": "Chennai",
-      "min_salary": 50000,
-      "max_count": 10,
-      "sites": "all"   // options: all, indeed, naukri, linkedin
-    }
-    """
     data = request.get_json()
 
     if not data or not data.get('skill'):
@@ -39,24 +28,24 @@ def api_search():
     if sites in ('all', 'indeed'):
         jobs.extend(scrape_indeed(query, location))
         time.sleep(1)
+
     if sites in ('all', 'naukri'):
         jobs.extend(scrape_naukri(query, location))
         time.sleep(1)
+
     if sites in ('all', 'linkedin'):
         jobs.extend(scrape_linkedin(query, location))
 
-    # Filter by min_salary if numeric info available
+    # Salary filtering
     filtered_jobs = []
     for job in jobs:
         salary_text = job.get('salary', '')
-        # crude filter example (string-based)
-        if salary_text:
-            try:
-                numeric = int(''.join([c for c in salary_text if c.isdigit()]) or 0)
-                if numeric < min_salary:
-                    continue
-            except:
-                pass
+        try:
+            numeric = int(''.join([c for c in salary_text if c.isdigit()]) or 0)
+            if numeric < min_salary:
+                continue
+        except:
+            pass
         filtered_jobs.append(job)
 
     # De-duplicate
@@ -69,7 +58,6 @@ def api_search():
         seen.add(link)
         unique_jobs.append(j)
 
-    # Limit count
     unique_jobs = unique_jobs[:max_count]
 
     return jsonify({
