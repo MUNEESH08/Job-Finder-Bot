@@ -7,6 +7,7 @@ HEADERS = {
                   'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36'
 }
 
+# -------------------- INDEED SCRAPER --------------------
 def scrape_indeed(query, location=None):
     results = []
     base = 'https://www.indeed.co.in/jobs'
@@ -14,86 +15,126 @@ def scrape_indeed(query, location=None):
     if location:
         params += f'&l={quote_plus(location)}'
     url = base + params
+
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(r.text, 'lxml')
-        for a in soup.select('a[data-jk], a.jobtitle, a.turnstileLink'):
-            href = a.get('href')
-            if not href:
+
+        for card in soup.select('div.job_seen_beacon')[:20]:
+            title = card.select_one('h2.jobTitle')
+            company = card.select_one('.companyName')
+            loc_tag = card.select_one('.companyLocation')
+            link_tag = card.select_one('a')
+
+            if not link_tag:
                 continue
-            link = href if href.startswith('http') else 'https://www.indeed.co.in' + href
-            title = a.get_text(strip=True)
-            card = a.find_parent()
-            company = '-'
-            loc = location or '-'
-            if card:
-                comp = card.select_one('.company, .companyName')
-                if comp: company = comp.get_text(strip=True)
-                loc_tag = card.select_one('.location, .companyLocation')
-                if loc_tag: loc = loc_tag.get_text(strip=True)
+
+            link = link_tag.get('href')
+            if link and not link.startswith('http'):
+                link = "https://www.indeed.co.in" + link
+
             results.append({
-                'title': title or query,
-                'company': company,
-                'location': loc,
+                'title': title.get_text(strip=True) if title else query,
+                'company': company.get_text(strip=True) if company else "-",
+                'location': loc_tag.get_text(strip=True) if loc_tag else (location or "-"),
+                'salary': "-",
                 'link': link,
                 'source': 'Indeed'
             })
-            if len(results) >= 20:
-                break
+
     except Exception:
-        results.append({'title': f'Indeed search: {query}', 'company': '-', 'location': location or '-', 'link': url, 'source': 'Indeed'})
+        results.append({'title': f'Indeed search: {query}', 'company': '-', 
+                        'location': location or '-', 'link': url, 'source': 'Indeed'})
+
     return results
 
 
+# -------------------- NAUKRI SCRAPER --------------------
 def scrape_naukri(query, location=None):
     results = []
     base = 'https://www.naukri.com/search'
     params = f'?q={quote_plus(query)}'
     if location:
         params += f'&l={quote_plus(location)}'
+
     url = base + params
+
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(r.text, 'lxml')
+
         tuples = soup.select('.jobTuple')
         for t in tuples[:20]:
             link_tag = t.select_one('a[href]')
             if not link_tag:
                 continue
+
             link = link_tag.get('href')
             title = link_tag.get_text(strip=True)
             company_tag = t.select_one('.company, .companyInfo')
-            company = company_tag.get_text(strip=True) if company_tag else '-'
             loc_tag = t.select_one('.location')
-            loc = loc_tag.get_text(strip=True) if loc_tag else (location or '-')
             salary_tag = t.select_one('.salary')
-            salary = salary_tag.get_text(strip=True) if salary_tag else '-'
+
             results.append({
-                'title': title, 'company': company, 'location': loc,
-                'salary': salary, 'link': link, 'source': 'Naukri'
+                'title': title,
+                'company': company_tag.get_text(strip=True) if company_tag else '-',
+                'location': loc_tag.get_text(strip=True) if loc_tag else (location or '-'),
+                'salary': salary_tag.get_text(strip=True) if salary_tag else '-',
+                'link': link,
+                'source': 'Naukri'
             })
+
     except Exception:
-        results.append({'title': f'Naukri search: {query}', 'company': '-', 'location': location or '-', 'link': url, 'source': 'Naukri'})
+        results.append({'title': f'Naukri search: {query}', 'company': '-', 
+                        'location': location or '-', 'link': url, 'source': 'Naukri'})
+
     return results
 
 
+# ------------------ LINKEDIN SCRAPER (FIXED) ------------------
+# Uses the LinkedIn public "seeMoreJobPostings" API
 def scrape_linkedin(query, location=None):
-    base = 'https://www.linkedin.com/jobs/search/'
-    params = f'?keywords={quote_plus(query)}'
-    if location:
-        params += f'&location={quote_plus(location)}'
-    url = base + params
+    q = quote_plus(query)
+    loc = quote_plus(location or "")
+
+    url = (
+        "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+        f"?keywords={q}&location={loc}"
+    )
+
     results = []
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(r.text, 'lxml')
-        for a in soup.select('a[href*="/jobs/view/"]')[:20]:
-            href = a.get('href')
-            link = href if href.startswith('http') else 'https://www.linkedin.com' + href
-            title = a.get_text(strip=True)
-            results.append({'title': title or query, 'company': '-', 'location': location or '-', 'link': link, 'source': 'LinkedIn'})
+
+        soup = BeautifulSoup(r.text, "lxml")
+
+        for job in soup.select("li")[:20]:
+            title = job.select_one("h3").get_text(strip=True) if job.select_one("h3") else "-"
+            company = job.select_one("h4").get_text(strip=True) if job.select_one("h4") else "-"
+            link_tag = job.select_one("a")
+
+            if not link_tag:
+                continue
+
+            link = "https://www.linkedin.com" + link_tag.get('href')
+
+            results.append({
+                "title": title,
+                "company": company,
+                "location": location or "-",
+                "salary": "-",
+                "link": link,
+                "source": "LinkedIn"
+            })
+
     except Exception:
-        results.append({'title': f'LinkedIn search: {query}', 'company': '-', 'location': location or '-', 'link': url, 'source': 'LinkedIn (search URL)'})
-    if not results:
-        results.append({'title': f'LinkedIn search: {query}', 'company': '-', 'location': location or '-', 'link': url, 'source': 'LinkedIn (search URL)'})
+        results.append({
+            "title": f"LinkedIn search: {query}",
+            "company": "-",
+            "location": location or "-",
+            "salary": "-",
+            "link": url,
+            "source": "LinkedIn"
+        })
+
     return results
